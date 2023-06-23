@@ -1,0 +1,103 @@
+version: '3.9'
+
+services:
+
+  etl_airflow_postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: airflow_db
+    volumes:
+      - etl_postgres_data_airflow:/var/lib/postgresql/data/
+    ports:
+      - "6001:5432"
+
+  selenium:
+    image: selenium/standalone-chrome
+    ports:
+      - 4444:4444
+
+
+
+  etl_airflow_webserver:
+    image: apache/airflow:2.1.2
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/airflow.cfg:/opt/airflow/airflow.cfg
+
+    ports:
+      - "6002:8080"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://user:password@srv2.omarelghiba.com:6001/airflow_db
+      - AIRFLOW__CORE__FERNET_KEY=YOUR_FERNET_KEY
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+    command: webserver
+
+
+    depends_on:
+      - airflow_postgres
+
+  etl_airflow_scheduler:
+    image: apache/airflow:2.1.2
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/airflow.cfg:/opt/airflow/airflow.cfg
+
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://omar:a1a2a3a4@srv2.omarelghiba.com:5429/airflow_db
+      - AIRFLOW__CORE__FERNET_KEY=YOUR_FERNET_KEY
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+    command: scheduler
+
+
+    depends_on:
+      - etl_airflow_postgres
+
+  etl_fastapi:
+    build: ./fastapi
+    depends_on:
+      - mlflow
+    ports:
+      - "6003:80"
+    volumes:
+      - ./fastapi:/app
+
+  etl_nginx:
+    build: ./nginx
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+    ports:
+      - "6000:80"
+    depends_on:
+      - fastapi
+
+
+  mongodb:
+    image: mongo
+    ports:
+      - 6005:27017
+    volumes:
+      - mongodb_data:/data/db
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - 6006:8081
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+
+    depends_on:
+      - mongodb
+
+
+
+
+volumes:
+  etl_postgres_data_airflow:
+  mongodb_data:
